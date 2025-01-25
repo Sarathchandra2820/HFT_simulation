@@ -4,9 +4,89 @@
 #include <random>
 #include <cstdio> // For popen and pclose
 
-class Generate_price {
-    
-}
+class PricingModel {
+public:
+    virtual double generatePrice() = 0; // Pure virtual function
+    virtual ~PricingModel() = default;  // Virtual destructor
+};
+
+class OUprocess : public PricingModel {
+private:
+    double initialPrice;      // Initial price
+    double timestep;          // Time step  
+    double mean; // Initial volatility
+    double meanReversion;     // Mean reversion rate
+    double longTermVol;       // Long-term volatility
+
+    //For the random number generation
+    double normal_mu = 0;
+    double normal_sigma = 1; 
+
+    //random number from uniform dist
+    std::random_device rd;
+    std::mt19937 generator;
+    std::normal_distribution<double> normal_dist;
+
+public:
+    double new_price;
+
+
+    // Constructor to initialize parameters
+    OUprocess(double initialPrice, double timestep, double mean, double meanReversion, double longTermVol)
+        : initialPrice(initialPrice), timestep(timestep), mean(mean), meanReversion(meanReversion),
+          longTermVol(longTermVol) {}
+
+    double generatePrice() override {
+
+        double randomSample = normal_dist(generator);
+
+        new_price = initialPrice + meanReversion*(mean-initialPrice)*timestep + longTermVol*(timestep)*randomSample;
+        // Use the parameters to simulate the price
+
+        initialPrice = new_price;
+        return new_price; // Simulate a random price
+    }
+};
+
+class JumpDiffusionModel : public PricingModel {
+private:
+    double initialPrice; // Initial price
+    double jumpIntensity; // Jump intensity (lambda)
+    double jumpMean;      // Mean jump size
+    double jumpStdDev;    // Standard deviation of jump size
+
+public:
+    // Constructor to initialize parameters
+    JumpDiffusionModel(double initialPrice, double jumpIntensity, double jumpMean, double jumpStdDev)
+        : initialPrice(initialPrice), jumpIntensity(jumpIntensity), jumpMean(jumpMean), jumpStdDev(jumpStdDev) {}
+
+    double generatePrice() override {
+        // Placeholder for Jump Diffusion logic
+        // Use the parameters to simulate the price
+        return initialPrice + (rand() % 15); // Simulate a random price
+    }
+};
+
+/*
+class MarketDrivenModel : public PricingModel {
+private:
+    double initialPrice; // Initial price
+    double bidAskSpread; // Bid-ask spread
+
+public:
+    // Constructor to initialize parameters
+    MarketDrivenModel(double initialPrice, double bidAskSpread)
+        : initialPrice(initialPrice), bidAskSpread(bidAskSpread) {}
+
+    double generatePrice() override {
+        // Placeholder for market-driven logic
+        // Use the parameters to simulate the price
+        return initialPrice + (rand() % 5); // Simulate a random price
+    }
+};
+*/
+
+
 
 int main () {
     double p0 = 100;
