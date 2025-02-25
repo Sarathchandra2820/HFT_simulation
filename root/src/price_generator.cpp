@@ -2,7 +2,9 @@
 #include <string>         // For string manipulation
 #include <vector>         // For storing a list of orders
 #include <random>
+#include <memory>
 #include <cstdio> // For popen and pclose
+#include <fstream>
 
 class PricingModel {
 public:
@@ -61,15 +63,15 @@ public:
 
 
     // Constructor to initialize parameters
-    OUprocess(double initialPrice, double timestep, double mean, double meanReversion, double longTermVol)
-        : initialPrice(initialPrice), timestep(timestep), mean(mean), meanReversion(meanReversion),
-          longTermVol(longTermVol) {}
+    OUprocess(double initialPrice, double mean, double longTermVol, double timestep, double meanReversion)
+        : initialPrice(initialPrice), mean(mean), longTermVol(longTermVol), timestep(timestep),
+         meanReversion(meanReversion), generator(rd()), normal_dist(0.0,1.0) {}
 
     double generatePrice() override {
 
         double randomSample = normal_dist(generator);
 
-        new_price = initialPrice + meanReversion*(mean-initialPrice)*timestep + longTermVol*(timestep)*randomSample;
+        new_price = initialPrice + meanReversion*(mean-initialPrice)*timestep + longTermVol*sqrt(timestep)*randomSample;
         // Use the parameters to simulate the price
 
         initialPrice = new_price;
@@ -116,14 +118,11 @@ public:
     double generatePrice() override {
         double U = uniform_dist(generator);
         double Z1 = normal_dist(generator);
-        double j_p;
+        double j_p = 0.0;
         if (U<jumpIntensity*timestep) {
             double Y = jump_dist(generator);
             double J = exp(Y);
             double j_p = (J-1)*initialPrice;
-        }
-        else {
-            double j_p = 0;
         }
         new_price = initialPrice + mean*initialPrice*timestep + volatility*initialPrice*sqrt(timestep)*Z1 + j_p;
         initialPrice = new_price;
@@ -133,7 +132,25 @@ public:
     }
 };
 
+class synthetic_price_generator {
+private:
+    std::vector<std::shared_ptr<PricingModel>> models;
+    std::vector<double> weights; 
 
+public:
+    void addModel(std::shared_ptr<PricingModel> model , double weight) {
+        models.push_back(model);
+        weights.push_back(weight);
+    }
+
+    double generate_syntheticprice() {
+        double synprice = 0.0; 
+        for (size_t i = 0; i < models.size(); i++) {
+            synprice+= models[i]->generatePrice() * weights[i];
+        }
+        return synprice;
+    }
+};
 
 /*
 class MarketDrivenModel : public PricingModel {
@@ -155,23 +172,42 @@ public:
 */
 
 
-
-
 int main () {
 
-    // Create an instance of JumpDiffusionModel with example parameters
+    synthetic_price_generator generator;
+
+    // General parameters
     double initialprice = 100.0;
     int n_steps = 1000;
-    JumpDiffusionModel model(initialprice, 0.05, 0.01, 0.001, 0.1, 0.0, 1.0);
+    double mean = 0.01;
+    double volatility = 0.01;
+    double time_step = 0.001;
+
+
+    // Model specific 
+    double jumpIntensity = 0.05;
+    double jumpMean = 0.1;
+    double jumpStdDev = 0.01;
+    auto JumpDiffModel = std::make_shared<JumpDiffusionModel>(initialprice, 
+        mean, volatility, time_step, jumpIntensity, jumpMean, jumpStdDev);
+
+    //JumpDiffusionModel model(initialprice, 0.05, 0.01, 0.001, 0.1, 0.0, 1.0);
+    double mean_revrate = 0.01;
+    auto OUmodel = std::make_shared<OUprocess>(initialprice, 
+        mean, volatility, time_step, mean_revrate);
+
+    generator.addModel(JumpDiffModel, 0.5);
+    generator.addModel(OUmodel, 0.5);
+
+    std::ofstream file("synthetic_prices.txt");
 
     // Generate and print a simulated price
     for (int i = 0; i<n_steps; i++) {
-        double price = model.generatePrice();
-        std::cout << "Time step " << (i + 1) << ": Price = " << price << std::endl;
+        double price = generator.generate_syntheticprice();
+        file << price << std::endl;
+        //std::cout << "Time step " << (i + 1) << ": Price = " << price << std::endl;
     }
-    
+    file.close();
     return 0;
-
-
 
 }
